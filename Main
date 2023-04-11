@@ -1,9 +1,9 @@
-REPORT 511 MESSAGE-ID zsd.
+REPORT SDREPORT MESSAGE-ID zsd.
 ************************************************************************
-* Description  : 銷售訂單匯出格菱物流格式
+* Description  : Sales order export to specifical excel form
 ************************************************************************
 INCLUDE zbdcrecx2.
-INCLUDE zrsdsd511top.
+INCLUDE top.
 ***********************************************************************
 * INITIALIZATION
 ***********************************************************************
