@@ -1,0 +1,621 @@
+REPORT 511 MESSAGE-ID zsd.
+************************************************************************
+* Description  : 銷售訂單匯出格菱物流格式
+************************************************************************
+INCLUDE zbdcrecx2.
+INCLUDE zrsdsd511top.
+***********************************************************************
+* INITIALIZATION
+***********************************************************************
+INITIALIZATION.
+   "Default Values
+    SELECT bname parid parva FROM usr05 INTO CORRESPONDING FIELDS OF TABLE t_usr05
+      WHERE bname = sy-uname.
+    READ TABLE t_usr05 INTO wa_usr05 WITH KEY parid = 'VKO'.
+    p_vkorg = wa_usr05-parva.
+    READ TABLE t_usr05 INTO wa_usr05 WITH KEY parid = 'SPA'.
+    IF wa_usr05-parva IS NOT INITIAL.
+        s_spart-low = wa_usr05-parva.
+        APPEND s_spart.
+    ENDIF.
+
+    LOOP AT SCREEN.
+        IF screen-name = 'P_VSBED'.
+            screen-input = 0.
+            MODIFY SCREEN.
+            EXIT.
+        ENDIF.
+    ENDLOOP.
+***********************************************************************
+*AT SELECTION SCREEN
+***********************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+    PERFORM f4_filename USING p_file.
+***********************************************************************
+* Start-of-selection PAUL
+***********************************************************************
+START-OF-SELECTION.
+  PERFORM read_data.
+***********************************************************************
+* End-of-selection PAUL
+***********************************************************************
+END-OF-SELECTION.
+    IF p_file IS INITIAL.
+        MESSAGE s005(tl) DISPLAY LIKE 'E'.
+        STOP.
+    ENDIF.
+    IF t_vbak[] IS NOT INITIAL.
+        PERFORM ex_gui_download USING 'BIN' '65001' 'XLSX'.
+    ELSE.
+        MESSAGE s999.
+    ENDIF.
+*&---------------------------------------------------------------------*
+*& Form read_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM read_data .
+    "Main Title
+    CLEAR wa_main.
+    wa_main-vbeln = text-001.
+    wa_main-edatu = text-002.
+    wa_main-kunnr = text-003.
+    wa_main-name = text-004.
+    wa_main-taxnum = text-005.
+    wa_main-name2 = text-006.
+    wa_main-no = text-007.
+    wa_main-tax_no = text-008.
+    wa_main-rec = text-009.
+    wa_main-net = text-010.
+    wa_main-net_m = text-011.
+    wa_main-tax = text-012.
+    wa_main-networth = text-013.
+    wa_main-street = text-014.
+    wa_main-tel = text-015.
+    wa_main-bstkd = text-016.
+    wa_main-werks = text-017.
+    wa_main-sales = text-018.
+    wa_main-sales_tel = text-019.
+    wa_main-rec_no = text-020.
+    wa_main-net_print = text-034.
+    wa_main-notes = text-021.
+    APPEND wa_main TO t_main.
+
+    "Detail Title
+    CLEAR wa_detail.
+    wa_detail-vbeln = text-022.
+    wa_detail-no = text-023.
+    wa_detail-deli = text-024.
+    wa_detail-matnr = text-025.
+    wa_detail-arktx = text-026.
+    wa_detail-kwmeng = text-027.
+    wa_detail-number = text-028.
+    wa_detail-msehl = text-029.
+    wa_detail-netpr = text-030.
+    wa_detail-netwr = text-031.
+    wa_detail-if = text-032.
+    wa_detail-date = text-033.
+    APPEND wa_detail TO t_detail.
+
+    "Catch address
+    SELECT addrnumber post_code1 name1 city1 street INTO CORRESPONDING FIELDS OF TABLE t_adrc
+      FROM adrc WHERE langu = sy-langu.
+    "Catch Unit
+    SELECT msehi msehl INTO CORRESPONDING FIELDS OF TABLE t_t006a FROM t006a WHERE spras = sy-langu.
+    "Catch phone
+    SELECT addrnumber tel_number tel_extens r3_user INTO CORRESPONDING FIELDS OF TABLE t_adr2
+      FROM adr2.
+
+    "Catch Main Data
+    SELECT auart vbeln kunnr knumv netwr kvgr1 INTO CORRESPONDING FIELDS OF TABLE t_vbak
+      FROM vbak
+      WHERE vkorg = p_vkorg
+      AND spart IN s_spart
+      AND vbeln IN s_vbeln
+      AND audat IN s_audat
+      AND auart IN s_auart
+      AND vsbed = '14'.
+
+    SORT t_vbak BY vbeln.
+
+    "Catch T_Detail
+    IF t_vbak IS NOT INITIAL.
+        SELECT vbeln posnr netwr matnr arktx kwmeng vrkme netpr INTO CORRESPONDING FIELDS OF TABLE t_vbap
+          FROM vbap
+          FOR ALL ENTRIES IN t_vbak
+          WHERE vbeln = t_vbak-vbeln.
+    ENDIF.
+
+    SORT t_vbap BY vbeln posnr.
+
+    "Catch Partner
+    SELECT vbeln parvw kunnr adrnr INTO CORRESPONDING FIELDS OF TABLE t_vbpa
+      FROM vbpa.
+
+    "Catch kschl
+    IF t_vbak IS NOT INITIAL.
+        SELECT knumv kposn kbetr kschl mwsk1 INTO CORRESPONDING FIELDS OF TABLE t_prcd_elements
+          FROM prcd_elements
+          FOR ALL ENTRIES IN t_vbak
+          WHERE knumv = t_vbak-knumv.
+    ENDIF.
+
+    "Catch Net
+    IF t_vbak IS NOT INITIAL.
+        SELECT vbeln netwr mwsbp INTO CORRESPONDING FIELDS OF TABLE t_net
+          FROM vbap
+          FOR ALL ENTRIES IN t_vbak
+          WHERE vbeln = t_vbak-vbeln.
+    ENDIF.
+
+    "Catch Delevery Date
+    IF t_vbak IS NOT INITIAL.
+        SELECT vbeln edatu INTO CORRESPONDING FIELDS OF TABLE t_vbep
+          FROM vbep
+          FOR ALL ENTRIES IN t_vbak
+          WHERE vbeln = t_vbak-vbeln.
+    ENDIF.
+
+    "Catch Name of the
+    IF t_vbak IS NOT INITIAL.
+        SELECT vbeln bstkd INTO CORRESPONDING FIELDS OF TABLE t_vbkd
+          FROM vbkd
+          FOR ALL ENTRIES IN t_vbak
+          WHERE vbeln = t_vbak-vbeln.
+    ENDIF.
+
+    "Catch Tax Number
+    IF t_vbak IS NOT INITIAL.
+        SELECT partner taxnum INTO CORRESPONDING FIELDS OF TABLE t_dfkkbptaxnum
+          FROM dfkkbptaxnum
+          FOR ALL ENTRIES IN t_vbak
+          WHERE partner = t_vbak-kunnr
+          AND taxtype = 'TW1'.
+    ENDIF.
+
+    PERFORM get_desc.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form get_desc
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_desc .
+* T_MAIN
+    CLEAR: wa_vbak, wa_main.
+    LOOP AT t_vbak INTO wa_vbak.
+        CLEAR: w_pr, w_con, w_tax, w_tax_all.
+
+        "Tax Classification
+        CLEAR wa_prcd_elements.
+        READ TABLE t_prcd_elements INTO wa_prcd_elements WITH KEY knumv = wa_vbak-knumv kschl = 'PR00'.
+        IF sy-subrc = 0.
+            w_pr = '00'.
+        ENDIF.
+        READ TABLE t_prcd_elements INTO wa_prcd_elements WITH KEY knumv = wa_vbak-knumv kschl = 'PR01'.
+        IF sy-subrc = 0.
+            w_pr = '01'.
+        ENDIF.
+
+        LOOP AT t_prcd_elements INTO wa_prcd_elements WHERE knumv = wa_vbak-knumv AND kschl = 'MWSI'.
+            CASE wa_prcd_elements-mwsk1.
+              WHEN 'S7'.
+                w_con = 'S7'.
+              WHEN 'S9'.
+                w_con = 'S9'.
+              WHEN 'SF'.
+                w_con = 'SF'.
+              WHEN 'S0'.
+                w_con = 'S0'.
+            ENDCASE.
+        ENDLOOP.
+
+        IF w_con IS INITIAL.
+            LOOP AT t_prcd_elements INTO wa_prcd_elements WHERE knumv = wa_vbak-knumv AND kschl = 'MWST'.
+                CASE wa_prcd_elements-mwsk1.
+                  WHEN 'S7'.
+                    w_con = 'S7'.
+                  WHEN 'S9'.
+                    w_con = 'S9'.
+                  WHEN 'SF'.
+                    w_con = 'SF'.
+                  WHEN 'S0'.
+                    w_con = 'S0'.
+                ENDCASE.
+            ENDLOOP.
+        ENDIF.
+
+        IF w_pr = '00'.
+            IF w_con = 'S7'.
+                wa_vbak-tax_no = '2'.
+            ELSEIF w_con = 'S9'.
+                wa_vbak-tax_no = '4'.
+            ELSEIF w_con = 'SF'.
+                wa_vbak-tax_no = '3'.
+            ELSEIF w_con = 'S0'.
+                wa_vbak-tax_no = '9'.
+            ENDIF.
+        ELSEIF w_pr = '01'.
+            IF w_con = 'S7'.
+                wa_vbak-tax_no = '1'.
+            ELSEIF w_con = 'S9'.
+                wa_vbak-tax_no = '4'.
+            ELSEIF w_con = 'SF'.
+                wa_vbak-tax_no = '3'.
+            ELSEIF w_con = 'S0'.
+                wa_vbak-tax_no = '9'.
+            ENDIF.
+        ENDIF.
+
+        "Money Calculation
+        CLEAR wa_net.
+        LOOP AT t_net INTO wa_net WHERE vbeln = wa_vbak-vbeln.
+            IF wa_net-netwr > 0.
+                wa_vbak-net = wa_vbak-net + wa_net-netwr.
+            ELSEIF wa_net-netwr < 0 .
+                wa_vbak-net_m = wa_vbak-net_m + wa_net-netwr.
+            ENDIF.
+
+            IF wa_net-mwsbp > 0.
+                w_tax = w_tax + wa_net-mwsbp.
+            ENDIF.
+            IF wa_net-mwsbp < 0.
+                w_net_m = w_net_m + wa_net-mwsbp.
+            ENDIF.
+            w_tax_all = w_tax_all + wa_net-mwsbp.
+        ENDLOOP.
+        wa_vbak-mwsbp = w_tax.
+
+        "Buyer: name11 Receiver: name12 Sales: name13
+        CLEAR wa_vbpa.
+        READ TABLE t_vbpa INTO wa_vbpa WITH KEY vbeln = wa_vbak-vbeln parvw = 'AG'.
+        CLEAR wa_adrc.
+        READ TABLE t_adrc INTO wa_adrc WITH KEY addrnumber = wa_vbpa-adrnr.
+        wa_vbak-name11 = wa_adrc-name1.
+
+        CLEAR wa_vbpa.
+        READ TABLE t_vbpa INTO wa_vbpa WITH KEY vbeln = wa_vbak-vbeln parvw = 'WE'.
+        CLEAR wa_adrc.
+        READ TABLE t_adrc INTO wa_adrc WITH KEY addrnumber = wa_vbpa-adrnr.
+        wa_vbak-name12 = wa_adrc-name1.
+        "Address
+        wa_vbak-adrnr = wa_vbpa-adrnr.
+        CONCATENATE wa_adrc-post_code1 wa_adrc-city1 wa_adrc-street INTO wa_vbak-street SEPARATED BY space.
+
+
+        CLEAR wa_vbpa.
+        READ TABLE t_vbpa INTO wa_vbpa WITH KEY vbeln = wa_vbak-vbeln parvw = 'AF'.
+        CLEAR wa_adrc.
+        READ TABLE t_adrc INTO wa_adrc WITH KEY addrnumber = wa_vbpa-adrnr.
+        wa_vbak-name13 = wa_adrc-name1.
+
+
+        "Telephone
+        CLEAR wa_adr2.
+        READ TABLE t_adr2 INTO wa_adr2 WITH KEY addrnumber = wa_vbak-adrnr r3_user = '1'.
+        IF wa_adr2-tel_extens IS NOT INITIAL.
+            CONCATENATE wa_adr2-tel_number '#' wa_adr2-tel_extens INTO wa_vbak-tel.
+        ELSE.
+            wa_vbak-tel = wa_adr2-tel_number.
+        ENDIF.
+
+        CLEAR wa_vbep.
+        READ TABLE t_vbep INTO wa_vbep WITH KEY vbeln = wa_vbak-vbeln.
+        wa_vbak-edatu = wa_vbep-edatu.
+
+        CLEAR wa_dfkkbptaxnum.
+        READ TABLE t_dfkkbptaxnum INTO wa_dfkkbptaxnum WITH KEY partner = wa_vbak-kunnr.
+        wa_vbak-taxnum = wa_dfkkbptaxnum-taxnum.
+
+        CLEAR wa_vbkd.
+        READ TABLE t_vbkd INTO wa_vbkd WITH KEY vbeln = wa_vbak-vbeln.
+        wa_vbak-bstkd = wa_vbkd-bstkd.
+
+        "Serial Number
+        CLEAR wa_vbap.
+        LOOP AT t_vbap INTO wa_vbap WHERE vbeln = wa_vbak-vbeln.
+            w_count = w_count + 1.
+            wa_vbap-no = w_count.
+            IF w_count < 10.
+                CONCATENATE '0' wa_vbap-no INTO wa_vbap-no.
+            ENDIF.
+            MODIFY t_vbap FROM wa_vbap.
+        ENDLOOP.
+
+        IF wa_vbak-kvgr1 = 'A'.
+            wa_vbak-rec_no = 'Y'.
+        ELSE.
+            wa_vbak-rec_no = 'N'.
+        ENDIF.
+
+        "客戶廠編
+        wa_vbak-werks = p_werks.
+
+        "Catch the Text in VA
+        l_id = '0001'.
+        l_object = 'VBBK'.
+        l_name = wa_vbak-vbeln.
+        CALL FUNCTION 'READ_TEXT'
+          EXPORTING
+            id                            = l_id
+            language                      = sy-langu
+            NAME                          = l_name
+            OBJECT                        = l_object
+          TABLES
+            lines                         = lt_lines
+         EXCEPTIONS
+           ID                            = 1
+           LANGUAGE                      = 2
+           NAME                          = 3
+           NOT_FOUND                     = 4
+           OBJECT                        = 5
+           REFERENCE_CHECK               = 6
+           WRONG_ACCESS_TO_ARCHIVE       = 7
+           OTHERS                        = 8.
+
+        CLEAR lwa_lines.
+        LOOP AT lt_lines INTO lwa_lines.
+            CONCATENATE wa_vbak-notes lwa_lines-tdline INTO wa_vbak-notes.
+        ENDLOOP.
+
+        "整理T_Main
+        CONCATENATE wa_vbak-auart wa_vbak-vbeln INTO wa_main-vbeln.
+        wa_main-edatu = wa_vbak-edatu.
+        wa_main-kunnr = wa_vbak-kunnr.
+        wa_main-name = wa_vbak-name11.
+        wa_main-taxnum = wa_vbak-taxnum.
+        wa_main-name2 = wa_vbak-name12.
+        IF wa_main-taxnum IS NOT INITIAL.
+            wa_main-no = '3'.
+        ELSE.
+            wa_main-no = '2'.
+        ENDIF.
+        wa_main-tax_no = wa_vbak-tax_no.
+        wa_main-rec = ' '.
+        wa_vbak-net = wa_vbak-net + wa_vbak-mwsbp.
+        wa_main-net = wa_vbak-net * 100.
+        wa_main-net_m = wa_vbak-net_m * 100.
+        "把負數往前挪
+        IF wa_vbak-net_m < 0.
+            CALL FUNCTION 'CLOI_PUT_SIGN_IN_FRONT'
+              CHANGING
+                VALUE = wa_main-net_m.
+        ENDIF.
+
+        wa_main-tax = wa_vbak-mwsbp * 100.
+        wa_main-networth =  wa_vbak-netwr.
+        wa_main-networth = wa_main-networth * 100.
+        wa_main-street = wa_vbak-street.
+        wa_main-tel = wa_vbak-tel.
+        wa_main-bstkd = wa_vbak-bstkd.
+        wa_main-werks = wa_vbak-werks.
+        wa_main-sales = wa_vbak-name13.
+        wa_main-sales_tel = ' '.
+        wa_main-rec_no = wa_vbak-rec_no.
+        wa_main-net_print = 'Y'.
+        wa_main-notes = wa_vbak-notes.
+
+        APPEND wa_main TO t_main.
+        CLEAR: wa_main, wa_vbak, w_count, w_pr, w_con.
+    ENDLOOP.
+
+* T_DETAIL
+    CLEAR: wa_vbap, wa_detail.
+    LOOP AT t_vbap INTO wa_vbap.
+
+        "出貨別
+        CLEAR wa_vbak.
+        READ TABLE t_vbak INTO wa_vbak WITH KEY vbeln = wa_vbap-vbeln.
+        IF wa_vbak-netwr IS INITIAL AND wa_vbap-netwr IS INITIAL.
+            wa_vbap-deli = 'Y'.
+        ELSEIF wa_vbap-netwr IS INITIAL AND wa_vbak-netwr IS NOT INITIAL.
+            wa_vbap-deli = 'G'.
+        ELSE.
+            wa_vbap-deli = 'N'.
+        ENDIF.
+        CONCATENATE wa_vbak-auart wa_vbak-vbeln INTO wa_vbap-vbeln_ex.
+        wa_vbap-knumv = wa_vbak-knumv.
+
+        CLEAR wa_t006a.
+        READ TABLE t_t006a INTO wa_t006a WITH KEY msehi = wa_vbap-vrkme.
+        wa_vbap-msehl = wa_t006a-msehl.
+
+        wa_detail-vbeln = wa_vbap-vbeln_ex.
+        wa_detail-no = wa_vbap-no.
+        wa_detail-deli = wa_vbap-deli.
+        wa_detail-matnr = wa_vbap-matnr.
+        wa_detail-arktx = wa_vbap-arktx.
+        wa_detail-kwmeng = wa_vbap-kwmeng.
+
+        CONDENSE wa_detail-kwmeng NO-GAPS.
+        SHIFT wa_detail-kwmeng RIGHT DELETING TRAILING '0'.
+        SHIFT wa_detail-kwmeng RIGHT DELETING TRAILING '.'.
+
+        wa_detail-number = '1'.
+        wa_detail-msehl = wa_vbap-msehl.
+
+        CLEAR wa_prcd_elements.
+        READ TABLE t_prcd_elements INTO wa_prcd_elements WITH KEY knumv = wa_vbap-knumv kposn = wa_vbap-posnr kschl = 'PR01'.
+        IF wa_prcd_elements IS NOT INITIAL.
+            wa_vbap-netpr = wa_prcd_elements-kbetr.
+        ENDIF.
+
+        CLEAR wa_prcd_elements.
+        READ TABLE t_prcd_elements INTO wa_prcd_elements WITH KEY knumv = wa_vbap-knumv kposn = wa_vbap-posnr kschl = 'PR00'.
+        IF wa_prcd_elements IS  NOT INITIAL.
+            wa_vbap-netpr = wa_prcd_elements-kbetr.
+        ENDIF.
+
+        wa_detail-netpr = wa_vbap-netpr.
+        wa_detail-netwr = wa_vbap-netwr * 100.
+
+        "負數往前
+        IF wa_vbap-netpr < 0.
+            CALL FUNCTION 'CLOI_PUT_SIGN_IN_FRONT'
+              CHANGING
+                VALUE = wa_detail-netpr.
+        ENDIF.
+        IF wa_vbap-netwr < 0.
+            CALL FUNCTION 'CLOI_PUT_SIGN_IN_FRONT'
+              CHANGING
+                VALUE = wa_detail-netwr.
+        ENDIF.
+        "消除多餘的小數
+        CONDENSE wa_detail-netpr NO-GAPS.
+        SHIFT wa_detail-netpr RIGHT DELETING TRAILING '0'.
+        SHIFT wa_detail-netpr RIGHT DELETING TRAILING '.'.
+
+        APPEND wa_detail TO t_detail.
+        CLEAR: wa_detail, wa_vbap.
+    ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GUI_DOWNLOAD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM ex_gui_download USING l_filetype TYPE char10
+                        l_codepage TYPE abap_encoding
+                        l_ext .
+
+    DATA: l_tabix TYPE sy-tabix.
+    DATA: l_filename TYPE string.
+    DATA: l_filelength TYPE i.
+    DATA: l_xstring TYPE xstring.
+    DATA: lt_xtab TYPE solix_tab.
+    FIELD-SYMBOLS <fst> TYPE STANDARD TABLE.
+    FIELD-SYMBOLS: <lwa_data> TYPE any.
+    FIELD-SYMBOLS: <l_field>  TYPE any.
+    FIELD-SYMBOLS: <l_value>  TYPE any.
+
+    l_filename = p_file.
+
+    CLEAR: l_filelength, l_xstring, lt_xtab.
+    IF l_ext = 'XLSX'.
+        TRY.
+            DATA(xlsx_handling) = cl_ehfnd_xlsx=>get_instance( ).
+            DATA(xlsx_document) = xlsx_handling->create_doc( ).
+            "xlsx_document->add_new_sheet( '12313' ).
+            DATA(xlsx_sheets) = xlsx_document->get_sheets( ).
+*            DATA(first_xlsx_sheet) = xlsx_document->get_sheet_by_id( xlsx_sheets[ 1 ]-sheet_id ).
+*            first_xlsx_sheet->change_sheet_name( '主檔' ).
+
+            CLEAR: l_xstring.
+*            LOOP AT t_main ASSIGNING <lwa_data>.
+*              l_tabix = sy-tabix.
+*              DO .
+*                UNASSIGN <l_value>.
+*                ASSIGN COMPONENT sy-index OF STRUCTURE <lwa_data> TO <l_value>.
+*                IF <l_value> IS NOT ASSIGNED.
+*                  EXIT.
+*                ENDIF.
+*                first_xlsx_sheet->set_cell_content( iv_row = l_tabix iv_column = sy-index iv_value = <l_value> ).
+*              ENDDO.
+*            ENDLOOP.
+*            UNASSIGN: <lwa_data>.
+
+            xlsx_document->add_new_sheet( '明細' ).
+            xlsx_sheets = xlsx_document->get_sheets( ).
+            DATA(second_xlsx_sheet) = xlsx_document->get_sheet_by_id( 2 ).
+
+            LOOP AT t_detail ASSIGNING <lwa_data>.
+                l_tabix = sy-tabix.
+                DO .
+                    UNASSIGN <l_value>.
+                    ASSIGN COMPONENT sy-index OF STRUCTURE <lwa_data> TO <l_value>.
+                    IF <l_value> IS NOT ASSIGNED.
+                        EXIT.
+                    ENDIF.
+                    second_xlsx_sheet->set_cell_content( iv_row = l_tabix iv_column = sy-index iv_value = <l_value> ).
+                ENDDO.
+            ENDLOOP.
+            UNASSIGN: <lwa_data>.
+
+            xlsx_document->add_new_sheet( '主檔' ).
+            xlsx_sheets = xlsx_document->get_sheets( ).
+            DATA(third_xlsx_sheet) = xlsx_document->get_sheet_by_id( 3 ).
+
+            CLEAR: l_xstring.
+            LOOP AT t_main ASSIGNING <lwa_data>.
+                l_tabix = sy-tabix.
+                DO .
+                    UNASSIGN <l_value>.
+                    ASSIGN COMPONENT sy-index OF STRUCTURE <lwa_data> TO <l_value>.
+                    IF <l_value> IS NOT ASSIGNED.
+                      EXIT.
+                    ENDIF.
+                    third_xlsx_sheet->set_cell_content( iv_row = l_tabix iv_column = sy-index iv_value = <l_value> ).
+                ENDDO.
+            ENDLOOP.
+            UNASSIGN: <lwa_data>.
+
+            l_xstring = xlsx_document->save( ).
+
+            CATCH cx_openxml_format INTO DATA(openxml_format_exception).
+                MESSAGE |Error occurs when constructing excel file instance. cx_openxml_format| TYPE 'S'.
+            CATCH cx_openxml_not_found INTO DATA(openxml_not_found_exception).
+                MESSAGE |Error occurs when constructing excel file instance. CX_OPENXML_NOT_FOUND | TYPE 'S'.
+            CATCH cx_openxml_not_allowed INTO DATA(openxml_not_allowed_exception).
+                MESSAGE |Error occurs when constructing excel file instance. CX_OPENXML_NOT_ALLOWED | TYPE 'S'.
+        ENDTRY.
+
+        CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+          EXPORTING
+            buffer        = l_xstring
+*           APPEND_TO_TABLE       = ' '
+          IMPORTING
+            output_length = l_filelength
+          TABLES
+            binary_tab    = lt_xtab.
+    ENDIF.
+
+    UNASSIGN <fst>.
+    ASSIGN lt_xtab[] TO <fst>.
+    CHECK: <fst> IS ASSIGNED.
+
+    CALL FUNCTION 'GUI_DOWNLOAD'
+      EXPORTING
+        bin_filesize            = xstrlen( l_xstring )
+        filename                = l_filename
+        filetype                = l_filetype
+*        write_field_separator   = l_sep
+        codepage                = l_codepage
+      IMPORTING
+        filelength                = l_filelength
+      TABLES
+        data_tab                = <fst>
+      EXCEPTIONS
+        file_write_error        = 1
+        no_batch                = 2
+        gui_refuse_filetransfer = 3
+        invalid_type            = 4
+        no_authority            = 5
+        unknown_error           = 6
+        header_not_allowed      = 7
+        separator_not_allowed   = 8
+        filesize_not_allowed    = 9
+        header_too_long         = 10
+        dp_error_create         = 11
+        dp_error_send           = 12
+        dp_error_write          = 13
+        unknown_dp_error        = 14
+        access_denied           = 15
+        dp_out_of_memory        = 16
+        disk_full               = 17
+        dp_timeout              = 18
+        file_not_found          = 19
+        dataprovider_exception  = 20
+        control_flush_error     = 21
+        OTHERS                  = 22.
+      IF sy-subrc <> 0.
+          MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+ENDFORM.
