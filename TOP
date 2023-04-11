@@ -1,0 +1,208 @@
+*&---------------------------------------------------------------------*
+*& INCLUDE   TOP
+*&---------------------------------------------------------------------*
+TABLES: vbak, vbap, kna1, knvv.
+
+DATA: w_count TYPE i,
+      w_pr(2),
+      w_con(2),
+      w_net_m TYPE mwsbp,
+      w_tax TYPE vbap-mwsbp,      "稅額全部加總
+      w_tax_all TYPE vbap-mwsbp . "稅額為正數的全部加總.
+
+DATA: l_id       TYPE thead-tdid,
+      l_name     TYPE thead-tdname,
+      l_object   TYPE thead-tdobject.
+DATA:lt_lines TYPE STANDARD TABLE OF tline,
+     lwa_lines LIKE tline.
+
+DATA: BEGIN OF wa_main,
+        vbeln(15),            "出貨單號     AUART + VBELN
+        edatu(8),             "出貨日期
+        kunnr(10),            "客戶代號
+        name(60),             "客戶名稱
+        taxnum(16),            "客戶統編
+        name2(60),            "客戶買受人
+        no(2),                "聯式         如果stcd1有值 = 3 沒有值 = 2
+        tax_no(3),            "稅分類
+        rec(10),              "發票號碼 固定空白
+        net(17),              "銷貨金額
+        net_m(17),            "折讓金額
+        tax(17),              "稅額為正數的加總
+        networth(17),         "含稅銷貨金額
+        street(70),           "到貨地地址
+        tel(20),              "客戶電話       電話+分機
+        bstkd(20),            "客戶訂單號碼
+        werks(16),            "客戶廠編
+        sales(20),            "業務名稱
+        sales_tel(15),        "業務聯絡電話(固定空白)
+        rec_no(10),           "隨車附發票否
+        net_print(15),        "出貨單單價列印否
+        notes(100),           "備註
+      END OF wa_main,
+      t_main LIKE STANDARD TABLE OF wa_main.
+
+DATA: BEGIN OF wa_detail,
+        vbeln(16),              "出貨單號
+        no(2),                  "項次
+        deli(3),                "出貨別
+        matnr(24),              "品號
+        arktx(40),              "品名
+        kwmeng TYPE string,     "出貨數量
+        number(2),              "入數
+        msehl(30),              "出貨單位
+        netpr TYPE string,      "單價
+        netwr(15),              "單品出貨金額
+        if(100),                "指定製造日期否 固定空白
+        date(8),                "製造日期
+      END OF wa_detail,
+      t_detail LIKE STANDARD TABLE OF wa_detail.
+
+DATA: BEGIN OF wa_vbak,
+        auart TYPE vbak-auart,          "訂單種類
+        vbeln TYPE vbak-vbeln,          "銷售單號
+        edatu TYPE vbep-edatu,          "出貨日期
+        kunnr TYPE vbak-kunnr,          "客戶帶碼
+        name11 TYPE kna1-name1,         "客戶名稱
+        taxnum TYPE dfkkbptaxnum-taxnum,"統編
+        name12 TYPE kna1-name1,         "收貨人
+        knumv TYPE vbak-knumv,          "串接 kschl
+        tax_no(1),                      "稅別碼
+        net TYPE vbak-netwr,            "淨值
+        net_m TYPE vbap-netwr,          "負的淨值相加
+        mwsbp TYPE vbap-mwsbp,          "稅額加總 (正數)
+        netwr TYPE vbak-netwr,          "總金額
+        adrnr TYPE vbpa-adrnr,          "判斷地址
+        street(110),                    "地址
+        werks(16),                      "客戶廠編
+        tel(20),                        "客戶電話
+        bstkd TYPE vbkd-bstkd,          "客戶訂單號碼
+        name13 TYPE kna1-name1,         "業務名稱
+        kvgr1 TYPE vbak-kvgr1,          "發票註記
+        rec_no(1),                      "隨車附發票否 if kvgr1 = 'A': 'Y' else: 'N'
+        notes(100),                      "內文- 出貨用備註
+      END OF wa_vbak,
+      t_vbak LIKE STANDARD TABLE OF wa_vbak.
+
+DATA: BEGIN OF wa_vbap,
+        vbeln TYPE vbap-vbeln,
+        posnr TYPE vbap-posnr,
+        vbeln_ex(16),
+        no(2),
+        deli(2),
+        matnr TYPE vbap-matnr,      "品號
+        arktx TYPE vbap-arktx,      "品名
+        kwmeng TYPE vbap-kwmeng,    "出貨數量
+        vrkme TYPE vbap-vrkme,      "出貨單位
+        msehl TYPE t006a-msehl,
+        netpr TYPE p LENGTH 12 DECIMALS 3,      "單價
+        netwr TYPE p LENGTH 12 DECIMALS 3,      "單品出貨金額
+        knumv TYPE vbak-knumv,
+      END OF wa_vbap,
+      t_vbap LIKE STANDARD TABLE OF wa_vbap.
+
+
+*課稅別  mwsk1 = s7 : kshcl = pr00    tax_no = 2'
+*                     kschl = pr01    tax_no = 1'
+*        mwsk1 = s9 : kschl = pr00    tax_no = 4'
+*                     kschl = pr01    tax_no = 4'
+*        mwsk1 = SF : kschl = pr00    tax_no = 3'
+*                     kschl = pr01    tax_no = 3'
+*        mwsk1 = S0 : kschl = pr00    tax_no = 9'
+*                     kschl = pr01    tax_no = 9'
+DATA: BEGIN OF wa_prcd_elements,
+        knumv TYPE prcd_elements-knumv,
+        kposn TYPE prcd_elements-kposn,
+        kschl TYPE prcd_elements-kschl,
+        mwsk1 TYPE prcd_elements-mwsk1,
+        kbetr TYPE prcd_elements-kbetr, "金額
+      END OF wa_prcd_elements,
+      t_prcd_elements LIKE STANDARD TABLE OF wa_prcd_elements.
+
+"金額 正 負 以判斷疊加上去 稅額: 金額為正的稅額去加總
+"wa_vbak-tax 為正數加總 ; tax_all 為稅額全部加總
+"wa_vbak-networth = netwr - tax_all
+DATA: BEGIN OF wa_net,
+        vbeln TYPE vbap-vbeln,
+        netwr TYPE vbap-netwr,
+        mwsbp TYPE vbap-mwsbp,
+
+
+      END OF wa_net,
+       t_net LIKE STANDARD TABLE OF wa_net.
+
+"Partner
+DATA: BEGIN OF wa_vbpa,
+        vbeln TYPE vbpa-vbeln,
+        parvw TYPE vbpa-parvw,
+        kunnr TYPE vbpa-kunnr,
+        adrnr TYPE vbpa-adrnr, "串接地址 pass to t_vbak
+      END OF wa_vbpa,
+      t_vbpa LIKE STANDARD TABLE OF wa_vbpa.
+
+"Delivery Date
+DATA: BEGIN OF wa_vbep,
+        vbeln TYPE vbep-vbeln,
+        edatu TYPE vbep-edatu,
+      END OF wa_vbep,
+      t_vbep LIKE STANDARD TABLE OF wa_vbep.
+
+
+"客戶訂單號碼
+DATA: BEGIN OF wa_vbkd,
+        vbeln TYPE vbkd-vbeln,
+        bstkd TYPE vbkd-bstkd,
+      END OF wa_vbkd,
+      t_vbkd LIKE STANDARD TABLE OF wa_vbkd.
+
+"地址
+DATA: BEGIN OF wa_adrc,
+        addrnumber TYPE adrc-addrnumber,
+        post_code1 TYPE adrc-post_code1,
+        city1 TYPE adrc-city1,
+        name1 TYPE adrc-name1,
+        street TYPE adrc-street,
+      END OF wa_adrc,
+      t_adrc LIKE STANDARD TABLE OF wa_adrc.
+
+"電話號碼
+DATA: BEGIN OF wa_adr2,
+        addrnumber TYPE adr2-addrnumber,
+        tel_number TYPE adr2-tel_number,
+        tel_extens TYPE adr2-tel_extens,
+        r3_user TYPE adr2-r3_user,
+      END OF wa_adr2,
+      t_adr2 LIKE STANDARD TABLE OF wa_adr2.
+
+"統編
+DATA: BEGIN OF wa_dfkkbptaxnum,
+        partner TYPE dfkkbptaxnum-partner,
+        taxnum TYPE dfkkbptaxnum-taxnum,
+      END OF wa_dfkkbptaxnum,
+      t_dfkkbptaxnum LIKE STANDARD TABLE OF wa_dfkkbptaxnum.
+
+"Unit
+DATA: BEGIN OF wa_t006a,
+        msehi TYPE t006a-msehi,
+        msehl TYPE t006a-msehl,
+      END OF wa_t006a,
+      t_t006a LIKE STANDARD TABLE OF wa_t006a.
+
+"Permmision
+DATA: BEGIN OF wa_usr05,
+        bname TYPE usr05-bname,
+        parid TYPE usr05-parid,
+        parva TYPE usr05-parva,
+      END OF wa_usr05,
+      t_usr05 LIKE STANDARD TABLE OF wa_usr05.
+***********************************************************************
+* Selection Screen / Option / Parameter
+***********************************************************************
+PARAMETERS p_vkorg TYPE vbak-vkorg OBLIGATORY.
+SELECT-OPTIONS s_spart FOR vbak-spart.
+SELECT-OPTIONS s_vbeln FOR vbak-vbeln.
+SELECT-OPTIONS s_audat FOR vbak-audat OBLIGATORY DEFAULT sy-datum.
+SELECT-OPTIONS s_auart FOR vbak-auart.
+PARAMETERS p_vsbed TYPE vbak-vsbed DEFAULT 14 .
+PARAMETERS p_werks TYPE vbak-xblnr.                 "客戶廠編
+PARAMETERS p_file TYPE rlgrap-filename OBLIGATORY.
